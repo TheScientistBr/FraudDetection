@@ -15,16 +15,17 @@ knitr::opts_chunk$set(echo = TRUE)
 Carregando as bibliotecas necessárias.
 
 
-```{r, include = FALSE}
+```{r warning=FALSE, message=FALSE}
 library(data.table)
 library(randomForest)
 library(DMwR)
 library(DT)
 ```
 
-Read the data
-```{r, include = F}
-dataset <- fread("data/creditcard.csv", stringsAsFactors = F, sep = ",", header =T)
+**Carregando o Dataset**
+
+```{r}
+dataset <- read.csv("data/creditcard.csv", stringsAsFactors = F, sep = ",", header =T)
 ```
 
 Depois de ler os dados, examinamos as probabilidades de nossa variável alvo. Nós já sabemos, a partir da descrição do conjunto de dados, também é de bom senso que tais conjuntos de dados serão altamente distorcidos.
@@ -52,64 +53,52 @@ Vamos separar o conjunto de dados de treino e teste. Lembre-se, 1 é a variável
 O uso o pacote DMwR e uso a Técnica de Oversampling de Minoridade Sintética (SMOTE), por Chawla, para lidar com a afinidade dos dados. A biblioteca "desequilibrada" também nos provoca com o algoritmo SMOT, mas o pacote DMwR facilita o nosso trabalho com a criação do conjunto de dados SMOTed e, de forma simulada, aplicando o modelo de classificação.
 
 ```{r}
-#set seed for reproducibility
-set.seed(7)
-#our SMOTed dataset and model
+set.seed(1)
 model <- SMOTE(Class~., data = train, perc.over = 200, k = 5, perc.under = 200, learner = "randomForest")
 ```
 
 Agora temos um modelo de floresta aleatória para para prever atrvés dos dados de teste. Agora vamos criar um conjunto de dados de teste SMOTed em nosso conjunto de dados de teste
 
 ```{r}
-#set seed
-set.seed(7)
-#our SMOTed dataset
+set.seed(1)
 smot_test <- SMOTE(Class~., data = test, perc.over = 200, k = 5, perc.under = 200)
-#datatable(smot_test)
 prop.table(table(smot_test$Class))
 ```
 
 Agora temos um conjunto de dados com nós. Como você pode ver, o conjunto de dados agora está equilibrado com quase 50:50 ocorrência de "sim" e "não". Podemos também achar que o conjunto de dados não é aleatório e as linhas iniciais da variável Classe são todas as 0 e as linhas finais da variável Class têm todas as 1. Podemos inserir aleatoriedade em nosso conjunto de dados de teste por amostragem.
 
 ```{r}
-#ranodm indices.
 split <- sample(1:nrow(smot_test), nrow(smot_test))
-#random dataset
-smot_test <- smot_test[split]
+smot_test <- smot_test[split,]
 ```
 
 Predizemos a variável Class com nosso modelo randomForest.
 
 ```{r}
 p <- predict(model, smot_test)
-#Accuracy, Precision and Recall.
 caret::confusionMatrix(smot_test$Class, p)
 ```
 
-Temos uma boa precisão para o nosso modelo, mas, olhe para o valor Sensitivity e Pos Pred, eles são a Precision and Recall, a diferença entre eles é bastante grande, isso significa que nosso modelo superou a previsão do resultado positivo de nossa variável que é 0 ("não"). Precisamos abordar esta superação do nosso modelo. Há algumas opções para resolver esse problema. Podemos preparar mais dados, podemos fazer a seleção de recursos ou podemos definir o limiar de classificação.
+Temos uma boa precisão para o nosso modelo, mas, olhe para o valor *Sensitivity* e Pos Pred, eles são a Precision e Recall, a diferença entre eles é bastante grande, isso significa que nosso modelo superou a previsão do resultado positivo de nossa variável que é 0 ("não"). Precisamos abordar esta superação do nosso modelo. Há algumas opções para resolver esse problema. Podemos preparar mais dados, podemos fazer a seleção de recursos ou podemos definir o limiar de classificação.
 
-Definiremos o limiar de classificação neste kernel e analisaremos a Precisão e Recuperação.
+Definiremos o limiar de classificação neste esperimento e analisaremos a Precision e  Recall.
 
 Para a classificação, obtemos nosso conjunto de dados de treinamento. Tenha cuidado aqui, você deve definir a mesma semente que você definir quando modelou.
 
+
 ```{r}
-#the same seed.
-set.seed(7)
-#training set
-train_smot <- SMOTE(Class~., data = train, perc.over = 200, k = 5,perc.under = 200)
-#datatable(train_smot, caption = "SMOT training set", style = "bootstrap", selection = list(mode = "multiple", selected = c(1:5, 31), target = "column"))
-#set seed
-set.seed(6)
-#putting randomness.
+set.seed(1)
+train_smot <- SMOTE(Class ~ ., data = train, perc.over = 200, k = 5,perc.under = 200)
+list(mode = "multiple", selected = c(1:5, 31), target = "column")
+set.seed(2)
 split <- sample(1:nrow(train_smot), nrow(train_smot))
-#random train set.
-train_smot <- train_smot[split]
+train_smot <- train_smot[split,]
 ```
 
 
-Definiremos um limiar de classificação que nos dê o maior valor de AUC. Para isso, tomamos a ajuda do pacote pROC. Nós iteramos através de um limite diferente e observamos o que nos dá o melhor resultado de AUC possível.
+Definiremos um limiar de classificação que nos dê o maior valor de *AUC*. Para isso, tomamos a ajuda do pacote `pROC`. Nós iteramos através de um limite diferente e observamos o que nos dá o melhor resultado de AUC possível.
 
-```{r, include = FALSE}
+```{r}
 library(pROC)
 c <- c()
 f <- c()
@@ -148,7 +137,7 @@ pre <- as.numeric(pre > p)
 caret::confusionMatrix(smot_test$Class, factor(pre))
 ```
 
-Nosso modelo foi bom, não só aumentamos a precisão, mas também reduzimos a diferença entre Precisão e Recuperação. Se quisermos, podemos tentar diferentes modelos e fazer muito mais com o conjunto de dados.                                                                                                                                                                   
+Nosso modelo foi bom, não só aumentamos a precisão, mas também reduzimos a diferença entre Precision e Recall. Se quisermos, podemos tentar diferentes modelos e fazer muito mais com o conjunto de dados.                                                                                                                                                                   
 ## Resumo
 
 As técnicas, como a amostragem excessiva e Sub amostragem são boas para lidar com dados divergentes, mas trazem seus próprios problemas. Na detecção de fraude e no gerenciamento de risco de crédito, estamos mais inclinados às probabilidades. A ruim dessas técnicas é que elas são tendenciosas em relação a probabilidades posteriores, o que não é bom. Para lidar com tais problemas, recalibramos para obter as probabilidades corretas. 
